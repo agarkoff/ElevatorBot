@@ -15,12 +15,11 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class Bot extends TelegramLongPollingBot {
@@ -33,15 +32,41 @@ public class Bot extends TelegramLongPollingBot {
     private final Map<Long, State> chatStates = new ConcurrentHashMap<>();
     private final Map<Long, String> chatPhones = new ConcurrentHashMap<>();
 
-    private final Map<String, String> floorMapping = Map.of(
-            "8", "0",
-            "13", "1"
-    );
+    private final Map<String, String> floorMapping;
 
     public Bot(String botToken, String botUsername, RestTemplate restTemplate) {
         super(botToken);
         this.botUsername = botUsername;
         this.restTemplate = restTemplate;
+        this.floorMapping = loadFloorMapping();
+    }
+
+    private Map<String, String> loadFloorMapping() {
+        Properties props = new Properties();
+        File floorsFile = new File("floors.txt");
+
+        try (FileInputStream fis = new FileInputStream(floorsFile)) {
+            props.load(fis);
+            log.info("Загружен файл конфигурации этажей: {}", floorsFile.getAbsolutePath());
+
+            Map<String, String> mapping = new HashMap<>();
+            for (String key : props.stringPropertyNames()) {
+                mapping.put(key, props.getProperty(key));
+                log.info("Загружен мапинг: этаж {} -> реле {}", key, props.getProperty(key));
+            }
+
+            if (mapping.isEmpty()) {
+                log.error("Файл конфигурации этажей пуст!");
+                // Возвращаем дефолтный мапинг
+                return Map.of("8", "0", "13", "1");
+            }
+
+            return mapping;
+        } catch (IOException e) {
+            log.error("Ошибка чтения файла конфигурации этажей: {}. Используется дефолтный мапинг.", e.getMessage());
+            // Возвращаем дефолтный мапинг в случае ошибки
+            return Map.of("8", "0", "13", "1");
+        }
     }
 
     @Override
@@ -117,7 +142,15 @@ public class Bot extends TelegramLongPollingBot {
     private void elevator(Long chatId, String floor) {
         log.info("select for chatId = {}, floor = {}", chatId, floor);
         String relay = floorMapping.get(floor);
-        Objects.requireNonNull(relay, "Этаж не найден");
+
+        if (relay == null) {
+            log.error("Этаж {} не найден в конфигурации", floor);
+            SendMessage message = new SendMessage(chatId + "", "Этаж не найден");
+            send(chatId, message);
+            sendSelect(chatId);
+            return;
+        }
+
         Long response = restTemplate.postForObject(
                 "/post?code={code}&relay={relay}",
                 null,
@@ -153,12 +186,23 @@ public class Bot extends TelegramLongPollingBot {
         return replyKeyboardMarkup;
     }
 
-    private static ReplyKeyboardMarkup getFloorsReplyKeyboardMarkup() {
+    private ReplyKeyboardMarkup getFloorsReplyKeyboardMarkup() {
         ReplyKeyboardMarkup replyKeyboardMarkup = new ReplyKeyboardMarkup(new ArrayList<>());
-        replyKeyboardMarkup.getKeyboard().add(new KeyboardRow(List.of(
-                new KeyboardButton("8"),
-                new KeyboardButton("13")
-        )));
+
+        // Создаем кнопки динамически на основе загруженного мапинга
+        List<String> floors = new ArrayList<>(floorMapping.keySet());
+        Collections.sort(floors, Comparator.comparingInt(Integer::parseInt));
+
+        List<KeyboardButton> buttons = floors.stream()
+                .map(KeyboardButton::new)
+                .collect(Collectors.toList());
+
+        // Группируем кнопки по 2-3 в ряд
+        for (int i = 0; i < buttons.size(); i += 3) {
+            int end = Math.min(i + 3, buttons.size());
+            replyKeyboardMarkup.getKeyboard().add(new KeyboardRow(buttons.subList(i, end)));
+        }
+
         return replyKeyboardMarkup;
     }
 
