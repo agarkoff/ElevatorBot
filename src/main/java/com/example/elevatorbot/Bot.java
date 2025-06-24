@@ -33,11 +33,13 @@ public class Bot extends TelegramLongPollingBot {
     private final Map<Long, String> chatPhones = new ConcurrentHashMap<>();
 
     private final Map<String, String> floorMapping;
+    private final String objectName; // Название объекта управления (этаж/ворота)
 
-    public Bot(String botToken, String botUsername, RestTemplate restTemplate) {
+    public Bot(String botToken, String botUsername, RestTemplate restTemplate, String objectName) {
         super(botToken);
         this.botUsername = botUsername;
         this.restTemplate = restTemplate;
+        this.objectName = objectName != null ? objectName : "этаж"; // По умолчанию "этаж"
         this.floorMapping = loadFloorMapping();
     }
 
@@ -47,23 +49,23 @@ public class Bot extends TelegramLongPollingBot {
 
         try (FileInputStream fis = new FileInputStream(floorsFile)) {
             props.load(fis);
-            log.info("Загружен файл конфигурации этажей: {}", floorsFile.getAbsolutePath());
+            log.info("Загружен файл конфигурации: {}", floorsFile.getAbsolutePath());
 
             Map<String, String> mapping = new HashMap<>();
             for (String key : props.stringPropertyNames()) {
                 mapping.put(key, props.getProperty(key));
-                log.info("Загружен мапинг: этаж {} -> реле {}", key, props.getProperty(key));
+                log.info("Загружен мапинг: {} {} -> реле {}", objectName, key, props.getProperty(key));
             }
 
             if (mapping.isEmpty()) {
-                log.error("Файл конфигурации этажей пуст!");
+                log.error("Файл конфигурации пуст!");
                 // Возвращаем дефолтный мапинг
                 return Map.of("8", "0", "13", "1");
             }
 
             return mapping;
         } catch (IOException e) {
-            log.error("Ошибка чтения файла конфигурации этажей: {}. Используется дефолтный мапинг.", e.getMessage());
+            log.error("Ошибка чтения файла конфигурации: {}. Используется дефолтный мапинг.", e.getMessage());
             // Возвращаем дефолтный мапинг в случае ошибки
             return Map.of("8", "0", "13", "1");
         }
@@ -121,7 +123,8 @@ public class Bot extends TelegramLongPollingBot {
     private void sendSelect(Long chatId) {
         log.info("send select for chatId = {}", chatId);
 
-        SendMessage message = new SendMessage(chatId + "", "Выберите этаж");
+        String messageText = String.format("Выберите %s", objectName);
+        SendMessage message = new SendMessage(chatId + "", messageText);
 
         ReplyKeyboardMarkup replyKeyboardMarkup = getFloorsReplyKeyboardMarkup();
         message.setReplyMarkup(replyKeyboardMarkup);
@@ -140,12 +143,13 @@ public class Bot extends TelegramLongPollingBot {
     }
 
     private void elevator(Long chatId, String floor) {
-        log.info("select for chatId = {}, floor = {}", chatId, floor);
+        log.info("select for chatId = {}, {} = {}", chatId, objectName, floor);
         String relay = floorMapping.get(floor);
 
         if (relay == null) {
-            log.error("Этаж {} не найден в конфигурации", floor);
-            SendMessage message = new SendMessage(chatId + "", "Этаж не найден");
+            log.error("{} {} не найден в конфигурации", objectName, floor);
+            String errorMessage = String.format("%s не найден", capitalize(objectName));
+            SendMessage message = new SendMessage(chatId + "", errorMessage);
             send(chatId, message);
             sendSelect(chatId);
             return;
@@ -191,7 +195,7 @@ public class Bot extends TelegramLongPollingBot {
 
         // Создаем кнопки динамически на основе загруженного мапинга
         List<String> floors = new ArrayList<>(floorMapping.keySet());
-        Collections.sort(floors, Comparator.comparingInt(Integer::parseInt));
+        floors.sort(Comparator.comparingInt(Integer::parseInt));
 
         List<KeyboardButton> buttons = floors.stream()
                 .map(KeyboardButton::new)
@@ -216,6 +220,13 @@ public class Bot extends TelegramLongPollingBot {
         }
     }
 
+    private String capitalize(String str) {
+        if (str == null || str.isEmpty()) {
+            return str;
+        }
+        return str.substring(0, 1).toUpperCase() + str.substring(1);
+    }
+
     @Override
     public String getBotUsername() {
         return botUsername;
@@ -231,7 +242,7 @@ public class Bot extends TelegramLongPollingBot {
             try {
                 Thread.sleep(RECONNECT_PAUSE);
             } catch (InterruptedException e1) {
-                e1.printStackTrace();
+                log.warn("InterruptedException", e1);
                 return;
             }
             botConnect();

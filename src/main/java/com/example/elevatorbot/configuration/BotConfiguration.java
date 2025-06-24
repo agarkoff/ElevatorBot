@@ -16,13 +16,15 @@ public class BotConfiguration {
     private String name;
     @Setter
     private String token;
+    @Setter
+    private String objectName = "этаж"; // По умолчанию "этаж", можно изменить на "ворота"
 
     @Autowired
     private RestTemplate restTemplate;
 
     @Bean
     public Bot bot() {
-        Bot bot = new Bot(token, name, restTemplate);
+        Bot bot = new Bot(token, name, restTemplate, objectName);
         bot.botConnect();
         return bot;
     }
