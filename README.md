@@ -47,25 +47,27 @@ mvn clean package
 
 ### 3. Конфигурация приложения
 
-Создайте файл `application.yml` или `application.properties` со следующими параметрами:
+Конфигурация приложения разделена на два файла:
 
-```yaml
-# Настройки Telegram бота
-bot:
-  name: YourBotName
-  token: YOUR_BOT_TOKEN_FROM_BOTFATHER
-  object-name: этаж  # Можно изменить на "ворота" или любое другое название
+#### 3.1. Конфигурация бота - `bot-config.txt`
 
-# Настройки backend-сервиса
-backend:
-  url: http://localhost:8080
+Создайте файл `bot-config.txt` в каталоге с JAR-файлом:
 
-# Настройки Spring Boot (опционально)
-server:
-  port: 8081
+```properties
+# Конфигурация Telegram бота
+# Этот файл должен находиться в том же каталоге, что и JAR-файл
+
+# Имя бота (username в Telegram)
+bot.name=YourBotName
+
+# Токен бота от BotFather
+bot.token=YOUR_BOT_TOKEN_FROM_BOTFATHER
+
+# Название объекта управления (этаж/ворота)
+bot.object-name=этаж
 ```
 
-#### Параметр object-name
+##### Параметр object-name
 
 Параметр `bot.object-name` позволяет настроить, что именно управляет бот:
 - `этаж` - для управления лифтом (по умолчанию)
@@ -75,6 +77,20 @@ server:
 Это значение будет использоваться во всех сообщениях пользователю:
 - "Выберите этаж" → "Выберите ворота"
 - "Этаж не найден" → "Ворота не найдены"
+
+#### 3.2. Конфигурация backend и Spring Boot - `application.yml`
+
+Создайте файл `application.yml` или `application.properties`:
+
+```yaml
+# Настройки backend-сервиса
+backend:
+  url: http://localhost:8080
+
+# Настройки Spring Boot (опционально)
+server:
+  port: 8081
+```
 
 ### 4. Создание Telegram бота
 
@@ -156,6 +172,7 @@ ElevatorBot/
 │               └── enums/
 │                   └── State.java              # Состояния диалога
 ├── pom.xml                                     # Конфигурация Maven
+├── bot-config.txt                              # Конфигурация Telegram бота
 ├── floors.txt                                  # Конфигурация объектов
 ├── ids.txt                                     # Белый список телефонов
 └── application.yml                             # Конфигурация приложения
@@ -237,6 +254,11 @@ POST /post?code={phone}&relay={relay}
 - Убедитесь в правильности URL в конфигурации
 - Проверьте логи ошибок
 
+### Бот не запускается
+- Проверьте наличие файла `bot-config.txt`
+- Убедитесь, что в файле указаны `bot.name` и `bot.token`
+- Проверьте правильность формата файла
+
 ## Развертывание в production
 
 ### Systemd service (Linux)
@@ -276,6 +298,7 @@ sudo systemctl status elevator-bot
 FROM openjdk:11-jre-slim
 WORKDIR /app
 COPY target/elevator-bot.jar app.jar
+COPY bot-config.txt bot-config.txt
 COPY floors.txt floors.txt
 COPY ids.txt ids.txt
 ENTRYPOINT ["java", "-jar", "app.jar"]
@@ -292,12 +315,11 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 
 ### Управление лифтом
 
-`application.yml`:
-```yaml
-bot:
-  name: ElevatorBot
-  token: YOUR_TOKEN
-  object-name: этаж
+`bot-config.txt`:
+```properties
+bot.name=ElevatorBot
+bot.token=YOUR_TOKEN
+bot.object-name=этаж
 ```
 
 `floors.txt`:
@@ -311,12 +333,11 @@ bot:
 
 ### Управление воротами
 
-`application.yml`:
-```yaml
-bot:
-  name: GateBot
-  token: YOUR_TOKEN
-  object-name: ворота
+`bot-config.txt`:
+```properties
+bot.name=GateBot
+bot.token=YOUR_TOKEN
+bot.object-name=ворота
 ```
 
 `floors.txt`:
