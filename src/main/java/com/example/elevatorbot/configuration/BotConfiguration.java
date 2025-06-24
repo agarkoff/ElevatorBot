@@ -12,6 +12,8 @@ import javax.annotation.PostConstruct;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 
 @Slf4j
@@ -33,8 +35,9 @@ public class BotConfiguration {
         Properties props = new Properties();
         File configFile = new File("bot-config.txt");
 
-        try (FileInputStream fis = new FileInputStream(configFile)) {
-            props.load(fis);
+        try (FileInputStream fis = new FileInputStream(configFile);
+             InputStreamReader reader = new InputStreamReader(fis, StandardCharsets.UTF_8)) {
+            props.load(reader);
             log.info("Загружен файл конфигурации бота: {}", configFile.getAbsolutePath());
 
             // Загружаем параметры из файла
