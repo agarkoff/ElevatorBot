@@ -195,7 +195,6 @@ public class Bot extends TelegramLongPollingBot {
 
         // Создаем кнопки динамически на основе загруженного мапинга
         List<String> floors = new ArrayList<>(floorMapping.keySet());
-        floors.sort(Comparator.comparingInt(Integer::parseInt));
 
         List<KeyboardButton> buttons = floors.stream()
                 .map(KeyboardButton::new)
